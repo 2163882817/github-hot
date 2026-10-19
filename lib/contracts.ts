@@ -45,7 +45,7 @@ export interface TrendingCandidate {
   originalIndex: number;
 }
 
-const languageSlugPattern = /^[a-z0-9][a-z0-9+#.-]*$/;
+const languageSlugPattern = /^[a-z0-9][a-z0-9+#.'*()-]*$/;
 
 export function isTrendingPeriod(value: string): value is TrendingPeriod {
   return value === "daily" || value === "monthly";

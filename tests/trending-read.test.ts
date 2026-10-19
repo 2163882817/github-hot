@@ -11,6 +11,11 @@ function fakeDatabase(header: Record<string, unknown>, items: Array<Record<strin
   const database: QueryDatabase = {
     async query(sql, values) {
       calls.push({ sql, values });
+      if (sql.startsWith("SELECT languages")) return { rows: [{ languages: [
+        { slug: "all", label: "全部语言" },
+        { slug: "typescript", label: "TypeScript" },
+        ...Array.from({ length: 9 }, (_, index) => ({ slug: "language-" + index, label: "Language " + index }))
+      ], collected_at: updated }] };
       if (sql.startsWith("SELECT s.id")) return { rows: [header] };
       if (sql.startsWith("SELECT github_id")) return { rows: items };
       return { rows: [] };
@@ -118,8 +123,16 @@ test("rejects malformed parameters and unregistered language slugs", async () =>
   for (const query of ["?period=weekly", "?period=daily&period=monthly", "?language=TypeScript", "?language=invalid/path"]) {
     assert.deepEqual(await readTrending(database, url + query, now), { status: 400, body: { error: "INVALID_QUERY" } });
   }
-  assert.deepEqual(await readTrending(database, url + "?language=typescript", now), { status: 400, body: { error: "INVALID_QUERY" } });
+  assert.deepEqual(await readTrending(database, url + "?language=not-in-directory", now), { status: 400, body: { error: "INVALID_QUERY" } });
   assert.equal(calls.length, 1);
+});
+
+test("validated language without a snapshot queues its independent collection", async () => {
+  const { database, calls } = fakeDatabase({ id: null, last_success_at: null, latest_attempt_at: null, requested_at: null });
+  const result = await readTrending(database, url + "?period=monthly&language=typescript", now);
+  assert.deepEqual(result, { status: 202, body: { status: "pending", retryAfterSeconds: 15 } });
+  assert.deepEqual(calls[1].values, ["monthly", "typescript"]);
+  assert.deepEqual(calls[2].values, ["monthly", "typescript", now.toISOString(), now.toISOString()]);
 });
 
 test("registered single-language snapshot is scoped to that language and period", async () => {
@@ -132,7 +145,7 @@ test("registered single-language snapshot is scoped to that language and period"
     assert.equal(result.body.language, "typescript");
     assert.equal(result.body.repositories[0].period, "monthly");
   }
-  assert.deepEqual(calls[0].values, ["monthly", "typescript"]);
+  assert.deepEqual(calls[1].values, ["monthly", "typescript"]);
 });
 
 test("incomplete snapshot is never returned as a partial ranking", async () => {

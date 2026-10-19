@@ -19,6 +19,7 @@ export interface SnapshotPublication {
   sourceUrl: string;
   collectedAt: string;
   repositories: EnrichedTrendingCandidate[];
+  leaseToken?: string;
 }
 
 export interface PublishResult {
@@ -83,6 +84,14 @@ export async function publishSnapshot(pool: SnapshotPool, input: SnapshotPublica
     await client.query("BEGIN");
     transactionStarted = true;
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [input.period + ":" + input.languageSlug]);
+    if (input.leaseToken) {
+      const lease = await client.query(
+        "SELECT 1 FROM collection_jobs WHERE period = $1 AND language_slug = $2 " +
+        "AND lease_token = $3::uuid AND lease_until > clock_timestamp() AND latest_attempt_status = 'running' FOR UPDATE",
+        [input.period, input.languageSlug, input.leaseToken]
+      );
+      if (lease.rows.length !== 1) throw new Error("Collection lease lost before publication");
+    }
     const current = await client.query(
       "SELECT s.id, s.collected_at FROM current_snapshots c JOIN snapshots s ON s.id = c.snapshot_id WHERE c.period = $1 AND c.language_slug = $2",
       [input.period, input.languageSlug]
@@ -120,6 +129,14 @@ export async function publishSnapshot(pool: SnapshotPool, input: SnapshotPublica
       );
     }
 
+    if (input.leaseToken) {
+      const lease = await client.query(
+        "SELECT 1 FROM collection_jobs WHERE period = $1 AND language_slug = $2 " +
+        "AND lease_token = $3::uuid AND lease_until > clock_timestamp() AND latest_attempt_status = 'running'",
+        [input.period, input.languageSlug, input.leaseToken]
+      );
+      if (lease.rows.length !== 1) throw new Error("Collection lease expired during publication");
+    }
     // This pointer is changed only after every item has been inserted successfully.
     await client.query(
       "INSERT INTO current_snapshots (period, language_slug, snapshot_id) VALUES ($1, $2, $3) ON CONFLICT (period, language_slug) DO UPDATE SET snapshot_id = EXCLUDED.snapshot_id",

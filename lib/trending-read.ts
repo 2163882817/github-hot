@@ -1,4 +1,5 @@
 import { isTrendingPeriod, normalizeLanguageSlug, type TrendingResponse, type TrendingRepository } from "./contracts";
+import { readLanguageCatalog } from "./language-catalog";
 
 export interface QueryDatabase {
   query(sql: string, values?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }>;
@@ -47,6 +48,12 @@ export async function readTrending(
   if (!params) return { status: 400, body: { error: "INVALID_QUERY" } };
 
   const { period, language } = params;
+  if (language !== "all") {
+    const catalog = await readLanguageCatalog(database);
+    if (!catalog?.languages.some((option) => option.slug === language)) {
+      return { status: 400, body: { error: "INVALID_QUERY" } };
+    }
+  }
   const headerResult = await database.query(
     "SELECT s.id, s.source_url, s.collected_at, s.created_at, s.item_count, " +
     "j.latest_attempt_at, j.latest_attempt_status, j.last_success_at, j.requested_at " +
@@ -59,15 +66,9 @@ export async function readTrending(
   const row = headerResult.rows[0];
   if (!row) throw new Error("Snapshot header query returned no row");
 
-  // Language directory discovery is a later stage. Until it exists, only all
-  // and combinations already registered by the server or published are known.
-  if (language !== "all" && !row.id && row.latest_attempt_at == null && row.requested_at == null && row.last_success_at == null) {
-    return { status: 400, body: { error: "INVALID_QUERY" } };
-  }
-
   const nowMs = now.getTime();
   if (!Number.isFinite(nowMs)) throw new Error("Invalid current time");
-  const successMs = optionalTime(row.created_at) ?? optionalTime(row.last_success_at);
+  const successMs = optionalTime(row.last_success_at) ?? optionalTime(row.created_at);
   const attemptMs = optionalTime(row.latest_attempt_at);
   const failedSinceSuccess = row.latest_attempt_status === "failed" &&
     attemptMs !== null && (successMs === null || attemptMs > successMs);
@@ -78,7 +79,10 @@ export async function readTrending(
     await database.query(
       "INSERT INTO collection_jobs (period, language_slug, requested_at, last_viewed_at) VALUES ($1, $2, $3, $4) " +
       "ON CONFLICT (period, language_slug) DO UPDATE SET " +
-      "requested_at = COALESCE(collection_jobs.requested_at, EXCLUDED.requested_at), " +
+      "requested_at = CASE WHEN EXCLUDED.requested_at IS NOT NULL AND " +
+      "(collection_jobs.lease_until IS NULL OR collection_jobs.lease_until <= EXCLUDED.last_viewed_at) " +
+      "THEN COALESCE(collection_jobs.requested_at, EXCLUDED.requested_at) " +
+      "ELSE collection_jobs.requested_at END, " +
       "last_viewed_at = EXCLUDED.last_viewed_at",
       [period, language, needsRefresh && retryAllowed ? now.toISOString() : null, now.toISOString()]
     );
@@ -128,7 +132,7 @@ export async function readTrending(
       sourceUrl: String(row.source_url),
       collectedAt,
       lastSuccessfulAt,
-      stale: failedSinceSuccess || nowMs - Date.parse(lastSuccessfulAt) >= STALE_AFTER_MS,
+      stale: failedSinceSuccess || nowMs - (successMs ?? Date.parse(lastSuccessfulAt)) >= STALE_AFTER_MS,
       repositories
     }
   };

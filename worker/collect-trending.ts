@@ -21,6 +21,7 @@ export interface CollectionOptions {
   now?: () => number;
   timeoutMs?: number;
   publish?: (pool: SnapshotPool, input: SnapshotPublication) => Promise<PublishResult>;
+  leaseToken?: string;
 }
 
 export interface CollectionResult extends PublishResult {
@@ -92,7 +93,8 @@ export async function collectTrendingSnapshot(options: CollectionOptions): Promi
     languageSlug,
     sourceUrl,
     collectedAt,
-    repositories: enriched.repositories
+    repositories: enriched.repositories,
+    leaseToken: options.leaseToken
   };
   const result = await (options.publish ?? publishSnapshot)(options.pool, publication);
   return {

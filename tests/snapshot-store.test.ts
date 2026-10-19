@@ -33,7 +33,7 @@ class FakeClient implements SnapshotClient {
   current: { id: string; collected_at: Date } | null = null;
   failAt: string | null = null;
 
-  async query(sql: string, values?: unknown[]) {
+  async query(sql: string, values?: unknown[]): Promise<{ rows: Array<Record<string, unknown>>; rowCount: number }> {
     this.calls.push({ sql, values });
     if (this.failAt && sql.startsWith(this.failAt)) throw new Error("database failure");
     if (sql.startsWith("SELECT s.id")) return { rows: this.current ? [this.current] : [], rowCount: this.current ? 1 : 0 };
@@ -100,4 +100,34 @@ test("invalid, empty, duplicated or unsorted results are rejected before opening
   for (const input of invalid) await assert.rejects(publishSnapshot(pool(client), input));
   assert.equal(client.calls.length, 0);
   assert.equal(client.released, false);
+});
+
+test("an expired collection lease rolls back before changing the visible snapshot", async () => {
+  const client = new FakeClient();
+  const input = { ...publication(), leaseToken: "00000000-0000-4000-8000-000000000001" };
+  await assert.rejects(publishSnapshot(pool(client), input), /lease lost/);
+  assert.equal(client.calls.some(({ sql }) => sql.startsWith("INSERT INTO snapshots")), false);
+  assert.equal(client.calls.at(-1)?.sql, "ROLLBACK");
+});
+
+test("a leased publication checks wall-clock expiry before the final pointer change", async () => {
+  class LeaseClient extends FakeClient {
+    checks = 0;
+    override async query(sql: string, values?: unknown[]) {
+      if (sql.startsWith("SELECT 1 FROM collection_jobs")) {
+        this.calls.push({ sql, values });
+        this.checks++;
+        return { rows: this.checks === 1 ? [{ "?column?": 1 }] : [], rowCount: this.checks === 1 ? 1 : 0 };
+      }
+      return super.query(sql, values);
+    }
+  }
+  const client = new LeaseClient();
+  await assert.rejects(publishSnapshot(pool(client), {
+    ...publication(), leaseToken: "00000000-0000-4000-8000-000000000001"
+  }), /lease expired during publication/);
+  assert.equal(client.checks, 2);
+  assert.ok(client.calls.filter(({ sql }) => sql.startsWith("SELECT 1 FROM collection_jobs")).every(({ sql }) => sql.includes("clock_timestamp()")));
+  assert.equal(client.calls.some(({ sql }) => sql.startsWith("INSERT INTO current_snapshots")), false);
+  assert.equal(client.calls.at(-1)?.sql, "ROLLBACK");
 });

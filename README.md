@@ -1,6 +1,6 @@
 # GitHub 热报
 
-当前交付：**阶段 0 已完成；阶段 1 已实现仓库元数据、快照事务发布、一次性采集和榜单读取 API**。首页仍只显示阶段状态，不展示模拟榜单。后续阶段将接入小时级调度与正式界面。A 版设计参考仍在 [prototype-a](./prototype-a/README.md)，其数据不可用于生产。
+当前交付：**阶段 0 已完成；阶段 1 的元数据、快照事务、采集和榜单读取已实现；阶段 2 已实现语言目录与小时级调度**。首页仍只显示阶段状态，不展示模拟榜单。A 版设计参考仍在 [prototype-a](./prototype-a/README.md)，其数据不可用于生产。
 
 ## 本地运行
 
@@ -12,7 +12,7 @@
 
 打开 http://localhost:3000 。当前页面只确认 Next.js 工程可启动。生产构建：`npm run build`；类型检查：`npm run typecheck`；解析测试：`npm test`；查看四个真实夹具的提取摘要：`npm run fixtures:check`。
 
-独立 worker 入口为 `npm run worker`，从 `.env.local` 读取配置，执行一次全部语言的日榜和月榜采集后退出；尚无小时级调度。运行前需先启动 PostgreSQL、设置真实的 `DATABASE_URL`，并用 `psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_core.sql` 执行迁移。建议配置 `GITHUB_TOKEN`，减少 GitHub API 限流。数据库迁移尚未在本机运行，因为本机没有 `psql`/数据库实例。
+独立 worker 入口为 `npm run worker`，从 `.env.local` 读取配置，每分钟扫描一次任务，按小时刷新语言目录与到期榜单；作为常驻进程运行。运行前需先启动 PostgreSQL、设置真实的 `DATABASE_URL`，按顺序执行 `migrations/001_core.sql`、`002_language_catalog.sql`、`003_collection_leases.sql`；例如 `psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_collection_leases.sql`。建议配置 `GITHUB_TOKEN`，减少 GitHub API 限流。数据库迁移尚未在本机运行，因为本机没有 `psql`/数据库实例。
 
 ## 夹具与限制
 
@@ -24,7 +24,7 @@
 
 `worker/github-metadata.ts` 已实现 GitHub REST 仓库元数据读取：稳定 ID、规范仓库链接、原文简介、主语言、累计 Star 和元数据获取时间。它提供内存缓存、ETag 条件请求、同仓库并发去重、有限重试、超时、限流后的等待时间及旧有效元数据回退。批量补全默认最多并发 2 条，失败条目被标记并跳过，不更改从 Trending 页面解析的 `periodStars`。
 
-该模块已接入一次性采集流程，尚未接入小时级 worker 调度或首页。测试使用模拟响应；另用 GitHub 公共仓库 REST 响应确认字段存在。
+该模块已接入采集和小时级 worker 调度，尚未接入首页。测试使用模拟响应；另用 GitHub 公共仓库 REST 响应确认字段存在。
 
 ## 阶段 1 进度：快照事务发布
 
@@ -32,14 +32,26 @@
 
 该模块已连入一次性 worker，尚未接入 API；本机没有 PostgreSQL 实例，事务测试用模拟数据库客户端验证调用顺序、回滚和指针保护，尚未运行真实数据库集成测试。
 
-## 阶段 1 进度：一次性真实采集流程
+## 阶段 1 进度：真实采集流程
 
-`worker/collect-trending.ts` 从对应的 GitHub Trending 日/月或单语言页面抓取 HTML，限制响应体大小并校验页面结构，再通过 GitHub REST 补齐仓库元数据，最后调用事务发布。单条元数据不可用时跳过该条；整页无有效条目、上游失败或页面异常时不调用发布。`worker/index.ts` 目前每次运行仅顺序尝试 daily/all 和 monthly/all，输出不含仓库简介或凭据的条目数及错误类别；其中一个失败也继续尝试另一个，最后以失败退出码报告问题。
+`worker/collect-trending.ts` 从对应的 GitHub Trending 日/月或单语言页面抓取 HTML，限制响应体大小并校验页面结构，再通过 GitHub REST 补齐仓库元数据，最后调用事务发布。单条元数据不可用时跳过该条；整页无有效条目、上游失败或页面异常时不调用发布。常驻 worker 输出不含仓库简介或凭据的条目数及错误类别。
 
 该流程已有模拟上游与发布端的测试，但本机缺少 PostgreSQL，尚未完成真实数据库与实时 GitHub 的整链路验证。榜单读取 API 已在下一节实现。
 
 ## 阶段 1 进度：榜单读取 API
 
-`GET /api/v1/trending?period=daily&language=all` 只读取当前已发布的完整快照，输出排名、周期新增 Star、原文简介与 UTC 时间，不返回用户翻译或密钥。已有快照返回 200；首次等待采集返回 202；首次采集失败返回 503；参数无效或尚未登记的语言返回 400。成功快照超过 90 分钟，或最近采集失败时，标记 `stale=true` 并保留旧榜。到期请求会登记数据库刷新需求，但实际消费要等下一阶段的调度器；查询不会直接抓取 GitHub。一次性 worker 现会写入采集开始、成功或失败状态，供 API 区分首次等待与失败。
+`GET /api/v1/trending?period=daily&language=all` 只读取当前已发布的完整快照，输出排名、周期新增 Star、原文简介与 UTC 时间，不返回用户翻译或密钥。已有快照返回 200；首次等待采集返回 202；首次采集失败返回 503；参数无效或不在服务端语言目录中的语言返回 400。成功快照超过 90 分钟，或最近采集失败时，标记 `stale=true` 并保留旧榜。到期请求会登记数据库刷新需求，由常驻 worker 消费；查询不会直接抓取 GitHub。worker 写入采集开始、成功或失败状态，供 API 区分首次等待与失败。
 
-当前没有语言目录服务；单语言参数只接受数据库中已有记录的组合。API 测试使用模拟数据库响应，本机尚未做真实 PostgreSQL 联调。下一小块应实现语言目录和持续采集调度。
+API 测试使用模拟数据库响应，本机尚未做真实 PostgreSQL 联调。
+
+## 阶段 2 进度：服务端语言目录
+
+`worker/language-directory.ts` 从 GitHub Trending 日榜的语言菜单读取实际 slug 和显示名称，经过校验后将完整目录写入 `language_catalog`；菜单解析失败或上游请求失败时，不覆盖上次成功目录。`GET /api/v1/languages` 返回已保存目录及 UTC 采集时间，尚无成功目录时返回 503。榜单 API 只接受此目录中的单语言 slug；首次请求该语言的日榜或月榜会分别登记独立采集需求并返回 202，不用全语言结果代替。
+
+目录解析已由真实 GitHub 页面夹具验证，包括 URL 编码、重复条目和标点符号的 slug。
+
+## 阶段 2 进度：小时级采集调度
+
+`worker/index.ts` 每分钟扫描数据库任务表；`daily/all` 与 `monthly/all` 固定每小时尝试更新，最近 24 小时访问过的语言日/月榜也按小时尝试。榜单 API 登记的首次或到期请求优先消费。`worker/job-scheduler.ts` 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 原子认领任务，十分钟租约并定期续租，避免多 worker 对同一组合重复采集。租约过期可重领；失败以 1、5、15 分钟退避，保留最近成功快照。任务完成写回成功或失败时间及错误类别。`migrations/003_collection_leases.sql` 增加租约令牌和失败次数。
+
+本机无 PostgreSQL，调度 SQL 和多 worker 去重通过模拟数据库测试，真实数据库并发与长时间运行仍待联调。下一小块可将现有 JSON API 与正式榜单界面接通。
