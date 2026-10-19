@@ -2,6 +2,7 @@ import { getDatabasePool } from "../lib/db";
 import { GitHubMetadataClient } from "./github-metadata";
 import { collectTrendingSnapshot } from "./collect-trending";
 import type { TrendingPeriod } from "../lib/contracts";
+import { recordCollectionFailure, recordCollectionStart, recordCollectionSuccess } from "../lib/collection-status";
 
 // One explicit collection pass. Scheduling and language job leases come later.
 async function main(): Promise<void> {
@@ -11,13 +12,17 @@ async function main(): Promise<void> {
   let failed = false;
   try {
     for (const period of periods) {
+      let published = false;
       try {
+        await recordCollectionStart(pool, period, "all", new Date().toISOString());
         const result = await collectTrendingSnapshot({
           period,
           languageSlug: "all",
           pool,
           metadataClient
         });
+        published = true;
+        await recordCollectionSuccess(pool, period, "all", new Date().toISOString());
         console.info(JSON.stringify({
           period, language: "all", status: result.published ? "published" : "unchanged",
           parsedCount: result.parsedCount, publishedCount: result.publishedCount,
@@ -25,9 +30,17 @@ async function main(): Promise<void> {
         }));
       } catch (error) {
         failed = true;
+        const failureCode = error instanceof Error && "code" in error ? String(error.code) : "COLLECTION_FAILED";
+        if (!published) {
+          try {
+            await recordCollectionFailure(pool, period, "all", new Date().toISOString(), failureCode);
+          } catch {
+            console.error(JSON.stringify({ period, language: "all", status: "status_record_failed" }));
+          }
+        }
         console.error(JSON.stringify({
           period, language: "all", status: "failed",
-          failureCode: error instanceof Error && "code" in error ? String(error.code) : "COLLECTION_FAILED"
+          failureCode: published ? "STATUS_RECORD_FAILED" : failureCode
         }));
       }
     }
