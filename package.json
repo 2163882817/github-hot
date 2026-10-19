@@ -9,7 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
-    "worker": "tsx worker/index.ts",
+    "worker": "node --env-file=.env.local --import tsx worker/index.ts",
     "fixtures:check": "tsx scripts/check-fixtures.ts"
   },
   "dependencies": {
