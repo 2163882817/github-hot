@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "project": "GitHub 热报",
+  "brief": "面向开发者的 GitHub Trending 日榜；查看周期新增 Star、切换语言、搜索、收藏与进入仓库详情。三套均使用相同演示仓库和静态数值。",
+  "round": "01",
+  "candidates": [
+    {
+      "id": "index",
+      "name": "清晰索引",
+      "concept": "像查阅维护良好的技术索引，仓库与涨星数能被连续扫读。",
+      "typography": "系统无衬线 14-28px；仓库名中等粗细；等宽数字 13-28px。",
+      "palette": ["#f7f9f8", "#192622", "#177b5c"],
+      "traits": ["窄侧栏与高密度行列表", "右侧稳定数字轴", "绿色仅标记选中和动作"],
+      "kind": "html",
+      "source": "index.html"
+    },
+    {
+      "id": "signal",
+      "name": "深色信号",
+      "concept": "把涨星榜当作开发社区的信号，榜首醒目，其余项目仍可快速比较。",
+      "typography": "紧凑无衬线 14-40px；主要涨星数字采用等宽 52px。",
+      "palette": ["#171b1a", "#e5eae6", "#cae879"],
+      "traits": ["通栏控制区", "榜首大数字", "低对比深色分层"],
+      "kind": "html",
+      "source": "signal.html"
+    },
+    {
+      "id": "editorial",
+      "name": "编辑榜单",
+      "concept": "像读一份有判断力的开源观察，先理解项目，再比较名次。",
+      "typography": "无衬线标题 18-48px；说明 15px；数字使用等宽字形。",
+      "palette": ["#f1f5f2", "#15322e", "#cf4b38"],
+      "traits": ["大标题与非对称项目网格", "头部仓库是视觉封面", "朱红强调涨星变化"],
+      "kind": "html",
+      "source": "editorial.html"
+    }
+  ]
+}

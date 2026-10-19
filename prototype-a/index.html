@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>GitHub 热报</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">G</span><span>GitHub 热报</span></div>
+      <div class="nav-section-label" data-i18n="discover">发现</div>
+      <nav class="sidebar-nav" aria-label="页面">
+        <button class="nav-item is-current" type="button" data-view="trending"><span data-i18n="trending">热门榜单</span><span class="nav-index">01</span></button>
+        <button class="nav-item" type="button" data-view="favorites"><span data-i18n="favorites">我的收藏</span><span id="favorite-count" class="nav-index">00</span></button>
+      </nav>
+      <div class="sidebar-footer"><span data-i18n="source">数据来源 GitHub Trending</span><br><span data-i18n="hourly">按小时尝试同步</span></div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark" aria-hidden="true">G</span><span>GitHub 热报</span></div>
+        <span class="topbar-caption" data-i18n="caption">发现正在增长的开源项目</span>
+        <div class="topbar-actions"><button id="translation-settings-trigger" class="settings-trigger" type="button" data-i18n="translationSettings">翻译设置</button><div class="locale-control" aria-label="界面语言"><button type="button" data-locale="zh" class="is-current" aria-pressed="true">中文</button><span aria-hidden="true">/</span><button type="button" data-locale="en" aria-pressed="false">English</button></div></div>
+      </header>
+
+      <nav class="mobile-nav" aria-label="页面"><button type="button" data-view="trending" class="is-current" data-i18n="trending">热门榜单</button><button type="button" data-view="favorites" data-i18n="favorites">我的收藏</button></nav>
+
+      <section class="page-heading" aria-labelledby="page-title">
+        <div><h1 id="page-title">热门仓库</h1><p id="page-subtitle">按本周期新增 Star 排序</p></div>
+        <div id="updated-at" class="updated-at"></div>
+      </section>
+
+      <section id="trending-controls" class="controls" aria-label="榜单筛选">
+        <div class="period-control" role="group" aria-label="榜单周期"><button type="button" data-period="daily" class="is-current" aria-pressed="true" data-i18n="daily">日榜</button><button type="button" data-period="monthly" aria-pressed="false" data-i18n="monthly">月榜</button></div>
+        <label class="language-control"><span class="sr-only" data-i18n="programmingLanguage">编程语言</span><select id="language-filter"><option value="all">全部语言</option><option value="TypeScript">TypeScript</option><option value="Python">Python</option><option value="Rust">Rust</option><option value="Go">Go</option></select></label>
+        <label class="search-control"><span class="sr-only" data-i18n="search">搜索当前榜单</span><input id="search-input" type="search" autocomplete="off" placeholder="搜索当前榜单中的仓库"></label>
+      </section>
+
+      <div id="stale-notice" class="notice" hidden></div>
+      <section class="results" aria-live="polite">
+        <div class="result-summary"><span id="result-count"></span><a id="source-link" href="https://github.com/trending" target="_blank" rel="noopener noreferrer"><span data-i18n="sourceShort">来源：GitHub Trending</span> <span aria-hidden="true">↗</span></a></div>
+        <div class="column-head" aria-hidden="true"><span id="rank-column" data-i18n="rank">排名</span><span data-i18n="repository">仓库</span><span data-i18n="totalStars">总 Star</span><span id="period-column">今日新增</span><span></span></div>
+        <div id="repository-list" class="repository-list"></div>
+        <div id="empty-state" class="empty-state" hidden><h2 id="empty-title"></h2><p id="empty-message"></p><button id="clear-search" type="button" class="plain-command" hidden></button></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="repo-dialog" class="repo-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span data-i18n="repoDetails">仓库详情</span><button id="close-dialog" class="icon-button" type="button" aria-label="关闭" title="关闭">×</button></div><div id="dialog-content"></div></dialog>
+  <dialog id="translation-dialog" class="repo-dialog translation-dialog" aria-labelledby="translation-dialog-title"><div class="dialog-top"><span data-i18n="translationSettings">翻译设置</span><button id="close-translation-dialog" class="icon-button" type="button" aria-label="关闭" title="关闭">×</button></div><div class="translation-body"><h2 id="translation-dialog-title" data-i18n="translationSettings">翻译设置</h2><p class="translation-intro" data-i18n="translationIntro">使用自己的 OpenAI API Key，按需翻译仓库简介。</p><label class="key-label" for="user-ai-key" data-i18n="apiKey">OpenAI API Key</label><div class="key-input-row"><input id="user-ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…"><button id="toggle-key-visibility" type="button" class="secondary-action" data-i18n="showKey">显示</button></div><p id="key-status" class="key-status" role="status"></p><p class="translation-disclosure" data-i18n="translationDisclosure">仅在当前页面会话使用；翻译可能产生费用，简介原文会发送给 AI 服务。此静态原型不调用服务，请勿输入真实 Key。</p><div class="translation-actions"><button id="clear-user-key" type="button" class="secondary-action" data-i18n="clearKey">清除 Key</button><button id="save-user-key" type="button" class="primary-action" data-i18n="saveKey">本次会话使用</button></div></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
