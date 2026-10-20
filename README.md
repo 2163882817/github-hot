@@ -1,6 +1,6 @@
 # GitHub 热报
 
-当前交付：**阶段 0 已完成；阶段 1 的元数据、快照事务、采集和榜单读取已实现；阶段 2 已实现语言目录与小时级调度**。首页仍只显示阶段状态，不展示模拟榜单。A 版设计参考仍在 [prototype-a](./prototype-a/README.md)，其数据不可用于生产。
+当前交付：**阶段 0 已完成；阶段 1 的元数据、快照事务、采集和榜单读取已实现；阶段 2 已实现语言目录与小时级调度；阶段 3 已接入 A 版正式榜单首页与仓库详情；阶段 4 已实现本地收藏首块**。首页只读取真实榜单 API，不展示模拟仓库。A 版设计参考仍在 [prototype-a](./prototype-a/README.md)，其数据不可用于生产。
 
 ## 本地运行
 
@@ -10,7 +10,7 @@
 2. `Copy-Item .env.example .env.local`
 3. `npm run dev`
 
-打开 http://localhost:3000 。当前页面只确认 Next.js 工程可启动。生产构建：`npm run build`；类型检查：`npm run typecheck`；解析测试：`npm test`；查看四个真实夹具的提取摘要：`npm run fixtures:check`。
+打开 http://localhost:3000 。首页默认请求日榜/全部语言；没有数据库与成功采集快照时显示等待或不可用状态，不会生成演示仓库。生产构建：`npm run build`；类型检查：`npm run typecheck`；解析测试：`npm test`；查看四个真实夹具的提取摘要：`npm run fixtures:check`。
 
 独立 worker 入口为 `npm run worker`，从 `.env.local` 读取配置，每分钟扫描一次任务，按小时刷新语言目录与到期榜单；作为常驻进程运行。运行前需先启动 PostgreSQL、设置真实的 `DATABASE_URL`，按顺序执行 `migrations/001_core.sql`、`002_language_catalog.sql`、`003_collection_leases.sql`；例如 `psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_collection_leases.sql`。建议配置 `GITHUB_TOKEN`，减少 GitHub API 限流。数据库迁移尚未在本机运行，因为本机没有 `psql`/数据库实例。
 
@@ -24,13 +24,13 @@
 
 `worker/github-metadata.ts` 已实现 GitHub REST 仓库元数据读取：稳定 ID、规范仓库链接、原文简介、主语言、累计 Star 和元数据获取时间。它提供内存缓存、ETag 条件请求、同仓库并发去重、有限重试、超时、限流后的等待时间及旧有效元数据回退。批量补全默认最多并发 2 条，失败条目被标记并跳过，不更改从 Trending 页面解析的 `periodStars`。
 
-该模块已接入采集和小时级 worker 调度，尚未接入首页。测试使用模拟响应；另用 GitHub 公共仓库 REST 响应确认字段存在。
+该模块已接入采集和小时级 worker 调度；首页经榜单 API 使用其发布结果。测试使用模拟响应；另用 GitHub 公共仓库 REST 响应确认字段存在。
 
 ## 阶段 1 进度：快照事务发布
 
 `lib/snapshot-store.ts` 在数据库事务中写入仓库、快照及有序条目，最后才切换 `current_snapshots` 指针。输入为空、重复、无序或字段无效时拒绝发布；任一步失败回滚，旧榜指针保留。相同榜单组合的并发发布通过 PostgreSQL 事务级 advisory lock 串行化，较旧采集不能覆盖较新快照。`lib/db.ts` 提供基于 `DATABASE_URL` 的服务端连接池，供后续采集流程调用。
 
-该模块已连入一次性 worker，尚未接入 API；本机没有 PostgreSQL 实例，事务测试用模拟数据库客户端验证调用顺序、回滚和指针保护，尚未运行真实数据库集成测试。
+该模块已连入一次性 worker 和榜单 API；本机没有 PostgreSQL 实例，事务测试用模拟数据库客户端验证调用顺序、回滚和指针保护，尚未运行真实数据库集成测试。
 
 ## 阶段 1 进度：真实采集流程
 
@@ -54,4 +54,12 @@ API 测试使用模拟数据库响应，本机尚未做真实 PostgreSQL 联调�
 
 `worker/index.ts` 每分钟扫描数据库任务表；`daily/all` 与 `monthly/all` 固定每小时尝试更新，最近 24 小时访问过的语言日/月榜也按小时尝试。榜单 API 登记的首次或到期请求优先消费。`worker/job-scheduler.ts` 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 原子认领任务，十分钟租约并定期续租，避免多 worker 对同一组合重复采集。租约过期可重领；失败以 1、5、15 分钟退避，保留最近成功快照。任务完成写回成功或失败时间及错误类别。`migrations/003_collection_leases.sql` 增加租约令牌和失败次数。
 
-本机无 PostgreSQL，调度 SQL 和多 worker 去重通过模拟数据库测试，真实数据库并发与长时间运行仍待联调。下一小块可将现有 JSON API 与正式榜单界面接通。
+本机无 PostgreSQL，调度 SQL 和多 worker 去重通过模拟数据库测试，真实数据库并发与长时间运行仍待联调。
+
+## 阶段 3 进度：正式榜单首页与仓库详情
+
+首页沿用 A「清晰索引」的侧栏、列表、色彩和手机布局，通过现有 API 显示真实快照。支持日榜/月榜、服务端语言目录选择、当前快照内仓库名或原文简介搜索；切换周期或语言清空搜索。页面每五分钟检查一次快照，显示北京时间的最近成功更新时间，并区分采集中、首次不可用、无匹配、空榜及旧数据提示。点击仓库名称可打开站内详情，查看同一快照中的名称、原文简介、语言、总 Star、周期新增 Star、采集时间与 GitHub 外链；仓库行内亦可直接打开 GitHub。
+
+## 阶段 4 进度：本地收藏
+
+榜单行与详情均可收藏或取消收藏；桌面侧栏及手机导航提供“我的收藏”列表。浏览器 localStorage 以稳定 GitHub ID 保存必要的展示信息，刷新后仍可查看，其他浏览器和设备不会同步。收藏详情优先使用当前榜单快照；仓库离榜时只显示保存的信息，当前周期新增 Star 显示为“—”并给出提示；当前榜单不可用时单独提示，不推断仓库已离榜。存储写入失败时收藏状态保持不变并显示错误。界面双语及翻译仍按后续小功能逐项实现。
