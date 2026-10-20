@@ -50,3 +50,20 @@ test("unavailable current list does not claim a saved repository left the rankin
   assert.match(html, /当前榜单尚不可用/);
   assert.ok(!html.includes("当前榜单无此仓库"));
 });
+
+test("English detail retains the original description and Beijing time", () => {
+  const html = renderToStaticMarkup(createElement(RepositoryDetail, { repository, period: "daily", periodStars: 56, collectedAt: snapshot.collectedAt, currentListAvailable: true, isFavorite: false, locale: "en", onToggleFavorite: () => {}, onClose: () => {} }));
+  assert.match(html, /Repository details/);
+  assert.match(html, /A useful project/);
+  assert.match(html, /Gained today/);
+  assert.match(html, /10\/19\/2026 10:30 Beijing time/);
+  assert.match(html, /Save repository/);
+});
+
+test("English detail explains a saved repository outside the ranking", () => {
+  const html = renderToStaticMarkup(createElement(RepositoryDetail, { repository, period: "monthly", periodStars: null, collectedAt: null, currentListAvailable: true, isFavorite: true, locale: "en", onToggleFavorite: () => {}, onClose: () => {} }));
+  assert.match(html, /Gained this month/);
+  assert.match(html, /not in the current ranking/);
+  assert.match(html, /Remove saved/);
+  assert.ok(!html.includes("+56"));
+});

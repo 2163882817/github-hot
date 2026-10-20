@@ -129,6 +129,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .detail-description { overflow-wrap: anywhere; }
 .repo-external { margin-left: 5px; color: var(--secondary); font-size: 11px; text-underline-offset: 2px; }
 .detail-unavailable { padding: 10px 12px; background: var(--warning-bg); color: var(--warning-text) !important; border-radius: 4px; font-size: 12px !important; }
+.locale-loading { visibility: hidden; }
+.topbar-actions { min-width: 0; justify-content: flex-end; }
 .search-control:focus-within, .language-control:focus-within { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
 .search-control input:focus-visible { outline: 0; }
 
@@ -141,6 +143,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .mobile-brand .brand-mark { width: 24px; height: 24px; font-size: 14px; }
   .topbar-caption { display: none; }
   .topbar-source { font-size: 11px; }
+  .topbar-actions .topbar-source { display: none; }
   .topbar-actions { gap: 12px; }
   .settings-trigger { padding: 6px 8px; font-size: 11px; }
   .mobile-nav { display: flex; gap: 20px; border-bottom: 1px solid var(--border); }
@@ -181,6 +184,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .topbar-actions { gap: 7px; }
   .settings-trigger { padding: 6px; }
   .result-summary a { max-width: 38%; }
+}
+
+@media (min-width: 761px) and (max-width: 1050px) {
+  .topbar-actions .topbar-source { display: none; }
 }
 
 @media (prefers-color-scheme: dark) {

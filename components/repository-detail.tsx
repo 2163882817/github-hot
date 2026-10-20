@@ -1,6 +1,7 @@
 import type { TrendingPeriod, TrendingRepository } from "../lib/contracts";
 import { formatBeijingTime } from "../lib/board-view";
 import type { FavoriteRepository } from "../lib/favorites";
+import { messages, type Locale } from "../lib/i18n";
 
 type RepositoryDetailProps = {
   repository: TrendingRepository | FavoriteRepository;
@@ -9,27 +10,29 @@ type RepositoryDetailProps = {
   collectedAt: string | null;
   currentListAvailable: boolean;
   isFavorite: boolean;
+  locale?: Locale;
   onToggleFavorite: () => void;
   onClose: () => void;
 };
 
-const number = (value: number) => new Intl.NumberFormat("zh-CN").format(value);
+const number = (value: number, locale: Locale) => new Intl.NumberFormat(locale === "zh" ? "zh-CN" : "en-US").format(value);
 
-export function RepositoryDetail({ repository, period, periodStars, collectedAt, currentListAvailable, isFavorite, onToggleFavorite, onClose }: RepositoryDetailProps) {
-  const periodLabel = period === "daily" ? "今日新增" : "本月新增";
+export function RepositoryDetail({ repository, period, periodStars, collectedAt, currentListAvailable, isFavorite, locale = "zh", onToggleFavorite, onClose }: RepositoryDetailProps) {
+  const t = messages[locale];
+  const periodLabel = period === "daily" ? t.todayGain : t.monthlyGain;
 
   return <>
-    <div className="dialog-top"><span>仓库详情</span><button className="icon-button" type="button" aria-label="关闭详情" title="关闭详情" onClick={onClose}>×</button></div>
+    <div className="dialog-top"><span>{t.detailTitle}</span><button className="icon-button" type="button" aria-label={t.closeDetail} title={t.closeDetail} onClick={onClose}>×</button></div>
     <div className="detail-body">
       <h2 id="detail-title">{repository.fullName}</h2>
-      <p className="detail-description">{repository.descriptionOriginal || "暂无简介"}</p>
+      <p className="detail-description">{repository.descriptionOriginal || t.noDescription}</p>
       <div className="detail-stats">
-        <div><span>总 Star</span><strong>{number(repository.totalStars)}</strong></div>
-        <div><span>{periodLabel}</span><strong className="accent">{periodStars === null ? "—" : "+" + number(periodStars)}</strong></div>
+        <div><span>{t.totalStars}</span><strong>{number(repository.totalStars, locale)}</strong></div>
+        <div><span>{periodLabel}</span><strong className="accent">{periodStars === null ? "—" : "+" + number(periodStars, locale)}</strong></div>
       </div>
-      {periodStars === null && <p className="detail-unavailable">{currentListAvailable ? "当前榜单无此仓库；上方展示最后保存的仓库信息。" : "当前榜单尚不可用；上方展示最后保存的仓库信息。"}</p>}
-      <div className="detail-actions"><a className="primary-action" href={repository.url} target="_blank" rel="noopener noreferrer">在 GitHub 打开 ↗</a><button type="button" className="secondary-action" onClick={onToggleFavorite}>{isFavorite ? "取消收藏" : "收藏仓库"}</button></div>
-      <div className="detail-foot">编程语言：{repository.language ?? "未标注语言"}<br />{collectedAt ? "榜单采集：" + formatBeijingTime(collectedAt) + " 北京时间" : "当前榜单暂无采集记录"}</div>
+      {periodStars === null && <p className="detail-unavailable">{currentListAvailable ? t.savedInfoMissing : t.savedInfoUnavailable}</p>}
+      <div className="detail-actions"><a className="primary-action" href={repository.url} target="_blank" rel="noopener noreferrer">{t.openGithub}</a><button type="button" className="secondary-action" onClick={onToggleFavorite}>{isFavorite ? t.unsave : t.saveRepository}</button></div>
+      <div className="detail-foot">{t.languageLabel}{repository.language ?? t.unmarkedLanguage}<br />{collectedAt ? t.collectedAt + formatBeijingTime(collectedAt, locale) + " " + t.beijing : t.noCollection}</div>
     </div>
   </>;
 }

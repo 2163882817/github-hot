@@ -1,4 +1,5 @@
 import type { TrendingRepository } from "./contracts";
+import type { Locale } from "./i18n";
 
 export function searchCurrentSnapshot(repositories: TrendingRepository[], query: string): TrendingRepository[] {
   const term = query.trim().toLocaleLowerCase();
@@ -8,7 +9,7 @@ export function searchCurrentSnapshot(repositories: TrendingRepository[], query:
   );
 }
 
-export function formatBeijingTime(iso: string): string {
+export function formatBeijingTime(iso: string, locale: Locale = "zh"): string {
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return "—";
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -16,5 +17,7 @@ export function formatBeijingTime(iso: string): string {
     hour: "2-digit", minute: "2-digit", hourCycle: "h23"
   }).formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-  return [value("year"), value("month"), value("day")].join("-") + " " + value("hour") + ":" + value("minute");
+  const datePart = locale === "en" ? [value("month"), value("day"), value("year")].join("/") :
+    [value("year"), value("month"), value("day")].join("-");
+  return datePart + " " + value("hour") + ":" + value("minute");
 }

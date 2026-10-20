@@ -20,5 +20,7 @@ test("search filters only the supplied snapshot and keeps upstream rank order", 
 
 test("snapshot times display in Beijing time", () => {
   assert.equal(formatBeijingTime("2026-10-19T00:30:00Z"), "2026-10-19 08:30");
+  assert.equal(formatBeijingTime("2026-10-19T16:30:00Z", "en"), "10/20/2026 00:30");
   assert.equal(formatBeijingTime("bad"), "—");
+  assert.equal(formatBeijingTime("bad", "en"), "—");
 });
